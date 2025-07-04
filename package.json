@@ -1,0 +1,26 @@
+{
+  "name": "backend_app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "pm2-runtime start server.mjs",
+    "dev": "nodemon server.mjs",
+    "schema": "node ./src/database/schema.js",
+    "test": "nodemon test.mjs"
+  },
+  "author": "victor",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "express-validator": "^7.2.1",
+    "firebase-admin": "^13.4.0",
+    "firebase-solyte": "^1.0.0",
+    "nodemon": "^3.1.10",
+    "pm2": "^6.0.5",
+    "uuid": "^11.1.0"
+  }
+}
