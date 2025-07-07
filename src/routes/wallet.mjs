@@ -12,6 +12,7 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
 const MIN_DEPOSIT_AMOUNT = 100;
 const MIN_TRANSFER_AMOUNT = 100;
+const NIBSS_PUBLIC_KEY = process.env.NIBSSPUBLIC_KEY;
 
 const validateAmount = (
   amount,
@@ -142,7 +143,36 @@ router.get("/find/:accountNo", async (req, res) => {
     });
   }
 });
-
+router.get("/wallet/:accountNo", async (req, res) => {
+  try {
+    const accountNo = req.params.accountNo;
+    const token = req.headers.authorization;
+    if (token !== NIBSS_PUBLIC_KEY) {
+      throw { message: "Unauthorized access", code: 401 };
+    }
+    const response = await Firestore.getAllQueryDoc(
+      "ACCOUNTS",
+      "accountNumber",
+      accountNo
+    );
+    const userWallet = response.length > 0 ? response[0] : {};
+    if (!userWallet.id) {
+      throw { message: "Account not found", code: 404 };
+    }
+    res.status(200).json({
+      data: {
+        accountName: userWallet.accountName,
+        accountNumber: userWallet.accountNumber,
+      },
+    });
+  } catch (err) {
+    console.error("Error finding account:", err);
+    res.status(err.code || 500).json({
+      message: err.message || "Internal server error",
+      status: false,
+    });
+  }
+});
 //  TRANSFER ROUTES
 
 router.post("/transfer/:accountNumber/:amount", async (req, res) => {
