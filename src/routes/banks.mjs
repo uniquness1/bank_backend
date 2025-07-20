@@ -192,7 +192,6 @@ router.post("/transfer", async (req, res) => {
         body: JSON.stringify(transferPayload),
       }
     );
-console.log(response)
     if (!response.ok) {
       const errorBody = await response.text();
       throw new Error(
@@ -200,37 +199,6 @@ console.log(response)
       );
     }
     const result = await response.json();
-    console.log(result)
-    const senderPrevBal = parseFloat(senderWallet.balance);
-    const senderNewBal = parseFloat(senderWallet.balance) - amount;
-    parseFloat(senderWallet.balance) = senderNewBal;
-    const Transaction = (await import("../models/transactions.mjs")).default;
-    const senderTransaction = new Transaction({
-      userId: senderWallet.userId,
-      senderId: senderWallet.userId,
-      senderName: senderWallet.accountName,
-      receiverName: accountName,
-      receiverBankCode: bankCode,
-      receiverBankName: bankName,
-      receiverAccountNo: accountNo,
-      amount,
-      mode: "DEBIT",
-      description: description || "Bank Transfer",
-      paidAt: new Date(),
-      status: "success",
-      prevBal: senderPrevBal,
-      newBal: senderNewBal,
-    });
-
-    await Promise.all([
-      Firestore.addDocWithId("ACCOUNTS", senderWallet.id, senderWallet),
-      Firestore.addDocWithId(
-        "TRANSACTIONS",
-        senderTransaction.id,
-        senderTransaction.toJSON()
-      ),
-    ]);
-
     return res.status(200).json({
       message: "Transfer successful",
       data: result,
