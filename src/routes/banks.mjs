@@ -2,7 +2,7 @@ import express from "express";
 import adminService from "../services/auth.mjs";
 import { Firestore } from "../database/db.mjs";
 import dotenv from "dotenv";
-const crypto = require('crypto');
+import crypto from "crypto";
 import { CollectionGroup } from "firebase-admin/firestore";
 
 dotenv.config();
