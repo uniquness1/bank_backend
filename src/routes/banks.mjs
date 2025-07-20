@@ -2,6 +2,7 @@ import express from "express";
 import adminService from "../services/auth.mjs";
 import { Firestore } from "../database/db.mjs";
 import dotenv from "dotenv";
+const crypto = require('crypto');
 import { CollectionGroup } from "firebase-admin/firestore";
 
 dotenv.config();
@@ -212,24 +213,125 @@ router.post("/transfer", async (req, res) => {
     });
   }
 });
-router.post("/nibss-webhook", async(req, res) => {
-try{
-  const authorization = req.headers.authorization
-  const NIBSS_PUBLIC_KEY = process.env.NIBSSPUBLIC_KEY
-  if(authorization !== NIBSS_PUBLIC_KEY){
-    return res.status(401).json({message: "Unauthorized"})
+router.post("/nibss-webhook", async (req, res) => {
+  try {
+    const authorization = req.headers.authorization;
+    const NIBSS_PUBLIC_KEY = process.env.NIBSS_PUBLIC_KEY;
+    if (!authorization || !crypto.timingSafeEqual(
+      Buffer.from(authorization), 
+      Buffer.from(NIBSS_PUBLIC_KEY)
+    )) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Unauthorized" 
+      });
+    }
+    if (!req.body || !req.body.event) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid request body" 
+      });
+    }
+    const { event, data } = req.body;
+    switch (event) {
+      case "transfer.debit.success":
+        await handleDebitSuccess(data);
+        break;
+        
+      case "transfer.credit.success":
+        await handleCreditSuccess(data);
+        break;
+      default:
+        console.log(`Unhandled event type: ${event}`);
+    }
+    res.status(200).json({ 
+      success: true, 
+      message: "Transaction successful" 
+    });
+  } catch (err) {
+    console.error('Webhook processing error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: "Internal server error" 
+    });
   }
-  if(req.body.event === "transfer.debit.success"){
-    const {data} = req.body
-    console.log(data)
+});
+async function handleDebitSuccess(data) {
+  try {
+    console.log('Processing debit success:', data);
+    const requiredFields = ['accountNumber', 'amount', 'bankCode'];
+    for (const field of requiredFields) {
+      if (!data[field]) {
+        throw new Error(`Missing required field: ${field}`);
+      }
+    }
+    const accountQuery = await Firestore.getAllQueryDoc("ACCOUNTS", "accountNumber", data.accountNumber);
+    const account = accountQuery.length > 0 ? accountQuery[0] : null;
+    if (!account) throw new Error("Account not found");
+    const prevBal = account.balance;
+    const amount = Number(data.amount);
+    const newBal = prevBal - amount;
+    if (newBal < 0) throw new Error("Insufficient funds for debit");
+    await Firestore.updateDocument("ACCOUNTS", account.id, { ...account, balance: newBal, updatedAt: new Date() });
+    const Transaction = (await import("../models/transactions.mjs")).default;
+    const tx = new Transaction({
+      userId: account.userId,
+      senderId: account.userId,
+      senderName: account.accountName,
+      receiverId: null,
+      receiverName: data.metadata?.senderName || data.bankName || "",
+      amount,
+      mode: "DEBIT",
+      description: data.metadata?.purpose || "Debit via NIBSS",
+      paidAt: new Date(),
+      status: "success",
+      prevBal,
+      newBal,
+      reference: data.reference || undefined,
+    });
+    await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
+  } catch (error) {
+    console.error('Error processing debit success:', error);
+    throw error;
   }
-  if(req.body.event === "transfer.credit.success"){
-    const {data} = req.body
-    console.log(data)
-  }
-}catch(err){
-console.log(err)
 }
-})
+async function handleCreditSuccess(data) {
+  try {
+    console.log('Processing credit success:', data);
+    const requiredFields = ['accountNumber', 'amount', 'bankCode'];
+    for (const field of requiredFields) {
+      if (!data[field]) {
+        throw new Error(`Missing required field: ${field}`);
+      }
+    }
+    const accountQuery = await Firestore.getAllQueryDoc("ACCOUNTS", "accountNumber", data.accountNumber);
+    const account = accountQuery.length > 0 ? accountQuery[0] : null;
+    if (!account) throw new Error("Account not found");
+    const prevBal = account.balance;
+    const amount = Number(data.amount);
+    const newBal = prevBal + amount;
+    await Firestore.updateDocument("ACCOUNTS", account.id, { ...account, balance: newBal, updatedAt: new Date() });
+    const Transaction = (await import("../models/transactions.mjs")).default;
+    const tx = new Transaction({
+      userId: account.userId,
+      senderId: data.metadata?.senderAccount || null,
+      senderName: data.metadata?.senderName || data.bankName || "",
+      receiverId: account.userId,
+      receiverName: account.accountName,
+      amount,
+      mode: "CREDIT",
+      description: data.metadata?.purpose || "Credit via NIBSS",
+      paidAt: new Date(),
+      status: "success",
+      prevBal,
+      newBal,
+      reference: data.reference || undefined,
+    });
+    await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
+  } catch (error) {
+    console.error('Error processing credit success:', error);
+    throw error;
+  }
+}
 
 export default router;
