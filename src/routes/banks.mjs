@@ -2,6 +2,7 @@ import express from "express";
 import adminService from "../services/auth.mjs";
 import { Firestore } from "../database/db.mjs";
 import dotenv from "dotenv";
+import { CollectionGroup } from "firebase-admin/firestore";
 
 dotenv.config();
 const router = express.Router();
@@ -191,7 +192,7 @@ router.post("/transfer", async (req, res) => {
         body: JSON.stringify(transferPayload),
       }
     );
-
+console.log(response)
     if (!response.ok) {
       const errorBody = await response.text();
       throw new Error(
@@ -199,6 +200,7 @@ router.post("/transfer", async (req, res) => {
       );
     }
     const result = await response.json();
+    console.log(result)
     const senderPrevBal = parseFloat(senderWallet.balance);
     const senderNewBal = parseFloat(senderWallet.balance) - amount;
     parseFloat(senderWallet.balance) = senderNewBal;
@@ -242,5 +244,24 @@ router.post("/transfer", async (req, res) => {
     });
   }
 });
+router.post("/nibss-webhook", async(req, res) => {
+try{
+  const authorization = req.headers.authorization
+  const NIBSS_PUBLIC_KEY = process.env.NIBSSPUBLIC_KEY
+  if(authorization !== NIBSS_PUBLIC_KEY){
+    return res.status(401).json({message: "Unauthorized"})
+  }
+  if(req.body.event === "transfer.debit.success"){
+    const {data} = req.body
+    console.log(data)
+  }
+  if(req.body.event === "transfer.credit.success"){
+    const {data} = req.body
+    console.log(data)
+  }
+}catch(err){
+console.log(err)
+}
+})
 
 export default router;
