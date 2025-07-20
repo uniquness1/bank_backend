@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "crypto";
 import adminService from "../services/auth.mjs";
 import { Firestore } from "../database/db.mjs";
-import Transaction from "../models/transaction.mjs";
+import Transaction from "../models/transactions.mjs";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -81,35 +81,6 @@ const paystackRequest = async (endpoint, method = "GET", data = null) => {
 
   return result;
 };
-
-// router.get("/:id", async (req, res) => {
-//   try {
-//     const accountId = req.params.id;
-//     const token = req.headers.authorization;
-//     const userCred = await authenticateUser(token);
-
-//     const userDataRes = await Firestore.getSingleDoc("USERS", userCred.uid);
-//     const userData = userDataRes.data();
-
-//     if (accountId !== userData.accountId) {
-//       throw {
-//         message: "Account ID doesn't match authenticated user ID",
-//         code: 403,
-//       };
-//     }
-
-//     const userAccountRes = await Firestore.getSingleDoc("ACCOUNTS", accountId);
-//     const userAccount = userAccountRes.data();
-
-//     res.status(200).json(userAccount);
-//   } catch (err) {
-//     console.error("Error fetching account:", err);
-//     res.status(err.code || 500).json({
-//       message: err.message || "Internal server error",
-//       status: false,
-//     });
-//   }
-// });
 
 // Find account by account number
 router.get("/find/:accountNo", async (req, res) => {
@@ -413,14 +384,35 @@ router.post(
 router.get("/transactions", async (req, res) => {
   try {
     const token = req.headers.authorization;
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, from, to, type } = req.query;
     const userCred = await authenticateUser(token);
 
-    const allTransactions = await Firestore.getAllQueryDoc(
+    let allTransactions = await Firestore.getAllQueryDoc(
       "TRANSACTIONS",
       "userId",
       userCred.uid
     );
+
+    // Filter by type if provided
+    if (type && (type === "CREDIT" || type === "DEBIT")) {
+      allTransactions = allTransactions.filter(tx => tx.mode === type);
+    }
+
+    // Filter by date range if provided
+    if (from) {
+      const fromDate = new Date(from);
+      allTransactions = allTransactions.filter(tx => {
+        const txDate = tx.paidAt ? new Date(tx.paidAt) : new Date(tx.createdAt);
+        return txDate >= fromDate;
+      });
+    }
+    if (to) {
+      const toDate = new Date(to);
+      allTransactions = allTransactions.filter(tx => {
+        const txDate = tx.paidAt ? new Date(tx.paidAt) : new Date(tx.createdAt);
+        return txDate <= toDate;
+      });
+    }
 
     const depositTransactions = allTransactions.sort((a, b) => {
       const dateA = (a.paidAt || a.createdAt)?.seconds
@@ -518,7 +510,7 @@ const handleSuccessfulDeposit = async (paymentData) => {
       );
       return;
     }
-
+    const depositAmount = amount / 100;
     const userAccount = await getUserAccount(metadata.userId);
     const newBalance = userAccount.balance + depositAmount;
 

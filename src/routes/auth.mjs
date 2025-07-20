@@ -317,6 +317,64 @@ router.post("/generate-account-number", authenticateToken, async (req, res) => {
   }
 });
 
+const validateChangePin = [
+  body('oldPin').matches(/^\d{4}$/).withMessage('Old PIN must be a 4-digit number'),
+  body('newPin').matches(/^\d{4}$/).withMessage('New PIN must be a 4-digit number'),
+]
+
+router.post(
+  '/change-pin',
+  [authenticateToken, validateChangePin],
+  async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+    const { oldPin, newPin } = req.body
+    const userId = req.user.uid
+    try {
+      const userDocSnapshot = await Firestore.getSingleDoc('USERS', userId)
+      if (!userDocSnapshot.exists()) {
+        return res.status(404).json({ error: 'User not found' })
+      }
+      const userDoc = userDocSnapshot.data()
+      const accountId = userDoc.accountId
+      if (!accountId) {
+        return res.status(404).json({ error: 'Account ID not found for user' })
+      }
+      const accountDocSnapshot = await Firestore.getSingleDoc('ACCOUNTS', accountId)
+      if (!accountDocSnapshot.exists()) {
+        return res.status(404).json({ error: 'Account not found' })
+      }
+      const accountData = accountDocSnapshot.data()
+      if (!accountData.pin) {
+        return res.status(400).json({ error: 'No PIN set for this account' })
+      }
+      const isOldPinValid = bcrypt.compareSync(oldPin, accountData.pin)
+      if (!isOldPinValid) {
+        return res.status(401).json({ error: 'Old PIN is incorrect' })
+      }
+      const hashedNewPin = bcrypt.hashSync(newPin, 10)
+      await Firestore.updateDocument('ACCOUNTS', accountId, {
+        pin: hashedNewPin,
+        updatedAt: new Date(),
+      })
+      res.status(200).json({ message: 'PIN changed successfully' })
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to change PIN' })
+    }
+  }
+)
+router.post('/logout', authenticateToken, async (req, res) => {
+  const userId = req.user.uid
+  try {
+    await Auth.logout(userId)
+    res.status(200).json({ message: 'Logged out successfully' })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to log out' })
+  }
+})
+
 function generateAccountNumber() {
   return Math.floor(1000000000 + Math.random() * 9000000000).toString();
 }
@@ -331,7 +389,9 @@ function mapError(error) {
       return "Password is too weak";
     case "auth/user-not-found":
     case "auth/wrong-password":
-      return "Invalid email or password";
+      return "Invalid login credentials";
+    case "auth/invalid-login-credentials":
+      return "Invalid login credentials";
     default:
       return error.message || "An error occurred. Please try again.";
   }

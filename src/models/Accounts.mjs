@@ -8,7 +8,7 @@ class Accounts {
     accountNumber = null,
     balance = 0,
     pin,
-    bankName = "Banka Bank",
+    bankName = "Banka",
     isActive = false,
     createdAt = new Date(),
     updatedAt = new Date(),
@@ -34,7 +34,11 @@ class Accounts {
     this.isActive = isActive;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
-    this.pin = pin ? bcrypt.hashSync(pin, 10) : null;
+    if (pin && pin.startsWith("$2b$")) {
+      this.pin = pin;
+    } else {
+      this.pin = pin ? bcrypt.hashSync(pin, 10) : null;
+    }
   }
 
   isPinValid(pin) {
