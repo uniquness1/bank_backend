@@ -247,21 +247,54 @@ router.post("/nibss-webhook", async (req, res) => {
 async function handleDebitSuccess(data) {
   try {
     console.log("Processing debit success:", data);
+
+    // Add validation for required data
+    if (!data || !data.metadata || !data.metadata.accountNumber) {
+      throw new Error(
+        "Missing required data: metadata.accountNumber is required"
+      );
+    }
+
+    if (!data.amount) {
+      throw new Error("Missing required data: amount is required");
+    }
+
     let datam = data.metadata;
+
+    // Ensure accountNumber is not undefined before querying
+    const accountNumber = datam.accountNumber;
+    if (!accountNumber) {
+      throw new Error("Account number is required but not provided");
+    }
+
     const accountQuery = await Firestore.getAllQueryDoc(
       "ACCOUNTS",
       "accountNumber",
-      datam.accountNumber
+      accountNumber
     );
+
     const account = accountQuery.length > 0 ? accountQuery[0] : null;
-    if (!account) throw new Error("Account not found");
+    if (!account) {
+      throw new Error(`Account not found for account number: ${accountNumber}`);
+    }
+
     const prevBal = account.balance;
     const amount = Number(data.amount);
+
+    // Validate amount is a valid number
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error("Invalid amount: must be a positive number");
+    }
+
     const newBal = prevBal - amount;
-    if (newBal < 0) throw new Error("Insufficient funds for debit");
+    if (newBal < 0) {
+      throw new Error("Insufficient funds for debit");
+    }
+
     await Firestore.updateDocument("ACCOUNTS", account.id, {
       balance: newBal,
     });
+
     const Transaction = (await import("../models/transactions.mjs")).default;
     const tx = new Transaction({
       userId: account.userId,
@@ -278,7 +311,10 @@ async function handleDebitSuccess(data) {
       newBal,
       reference: "BN" + Math.floor(Math.random() * 5000).toString(),
     });
+
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
+
+    console.log(`Debit processed successfully for account ${accountNumber}`);
   } catch (error) {
     console.error("Error processing debit success:", error);
     throw error;
