@@ -255,12 +255,7 @@ router.post("/nibss-webhook", async (req, res) => {
 async function handleDebitSuccess(data) {
   try {
     console.log("Processing debit success:", data);
-    const requiredFields = ["accountNumber", "amount", "bankCode"];
-    for (const field of requiredFields) {
-      if (!data[field]) {
-        throw new Error(`Missing required field: ${field}`);
-      }
-    }
+    let data = data.metadata;
     const accountQuery = await Firestore.getAllQueryDoc(
       "ACCOUNTS",
       "accountNumber",
@@ -302,12 +297,7 @@ async function handleDebitSuccess(data) {
 async function handleCreditSuccess(data) {
   try {
     console.log("Processing credit success:", data);
-    const requiredFields = ["accountNumber", "amount", "bankCode"];
-    for (const field of requiredFields) {
-      if (!data[field]) {
-        throw new Error(`Missing required field: ${field}`);
-      }
-    }
+    let data = data.metadata;
     const accountQuery = await Firestore.getAllQueryDoc(
       "ACCOUNTS",
       "accountNumber",
