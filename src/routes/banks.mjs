@@ -240,10 +240,6 @@ router.post("/nibss-webhook", async (req, res) => {
       default:
         console.log(`Unhandled event type: ${event}`);
     }
-    res.status(200).json({
-      success: true,
-      message: "Transaction successful",
-    });
   } catch (err) {
     console.error("Webhook processing error:", err);
     res.status(500).json({
@@ -255,11 +251,11 @@ router.post("/nibss-webhook", async (req, res) => {
 async function handleDebitSuccess(data) {
   try {
     console.log("Processing debit success:", data);
-    let data = data.metadata;
+    let datam = data.metadata;
     const accountQuery = await Firestore.getAllQueryDoc(
       "ACCOUNTS",
       "accountNumber",
-      data.accountNumber
+      datam.accountNumber
     );
     const account = accountQuery.length > 0 ? accountQuery[0] : null;
     if (!account) throw new Error("Account not found");
@@ -297,7 +293,6 @@ async function handleDebitSuccess(data) {
 async function handleCreditSuccess(data) {
   try {
     console.log("Processing credit success:", data);
-    let data = data.metadata;
     const accountQuery = await Firestore.getAllQueryDoc(
       "ACCOUNTS",
       "accountNumber",
@@ -316,13 +311,13 @@ async function handleCreditSuccess(data) {
     const Transaction = (await import("../models/transactions.mjs")).default;
     const tx = new Transaction({
       userId: account.userId,
-      senderId: data.metadata?.senderAccount || null,
+      senderId: data.metadata?.senderAccount || "",
       senderName: data.metadata?.senderName || data.bankName || "",
       receiverId: account.userId,
       receiverName: account.accountName,
       amount,
       mode: "CREDIT",
-      description: data.metadata?.purpose || "Credit via NIBSS",
+      description: data.metadata?.description || "NIBSS Credit",
       paidAt: new Date(),
       status: "success",
       prevBal,

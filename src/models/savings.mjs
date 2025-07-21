@@ -7,7 +7,7 @@ class Savings {
     name,
     targetAmount = 0,
     balance = 0,
-    status = "active", // active, completed, closed
+    status = "active",
     createdAt = new Date(),
     updatedAt = new Date(),
   }) {
@@ -35,4 +35,4 @@ class Savings {
   }
 }
 
-export default Savings; 
+export default Savings;
