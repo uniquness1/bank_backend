@@ -2,8 +2,6 @@ import express from "express";
 import adminService from "../services/auth.mjs";
 import { Firestore } from "../database/db.mjs";
 import dotenv from "dotenv";
-import crypto from "crypto";
-import { CollectionGroup } from "firebase-admin/firestore";
 
 dotenv.config();
 const router = express.Router();
@@ -216,7 +214,7 @@ router.post("/transfer", async (req, res) => {
 router.post("/nibss-webhook", async (req, res) => {
   try {
     const authorization = req.headers.authorization;
-    const NIBSS_PUBLIC_KEY = process.env.NIBSS_PUBLIC_KEY;
+    const NIBSS_PUBLIC_KEY = process.env.NIBSSPUBLIC_KEY;
     if (!authorization || !NIBSS_PUBLIC_KEY) {
       return res.status(401).json({
         success: false,
