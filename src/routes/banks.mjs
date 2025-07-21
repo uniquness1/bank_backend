@@ -327,7 +327,7 @@ async function handleCreditSuccess(data) {
       status: "success",
       prevBal,
       newBal,
-      reference: data.reference || undefined,
+      reference,
     });
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
   } catch (error) {
