@@ -215,12 +215,13 @@ router.post("/nibss-webhook", async (req, res) => {
   try {
     const authorization = req.headers.authorization;
     const NIBSS_PUBLIC_KEY = process.env.NIBSSPUBLIC_KEY;
-    if (!authorization || !NIBSS_PUBLIC_KEY) {
+    if (authorization !== NIBSS_PUBLIC_KEY) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized",
       });
     }
+    res.sendStatus(200);
     if (!req.body || !req.body.event) {
       return res.status(400).json({
         success: false,
