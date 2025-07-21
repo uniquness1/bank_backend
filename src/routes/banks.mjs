@@ -258,11 +258,8 @@ async function handleDebitSuccess(data) {
     if (!data.amount) {
       throw new Error("Missing required data: amount is required");
     }
-
     let datam = data.metadata;
-
-    // Ensure accountNumber is not undefined before querying
-    const accountNumber = datam.accountNumber;
+    const accountNumber = datam.senderAccount;
     if (!accountNumber) {
       throw new Error("Account number is required but not provided");
     }
