@@ -242,10 +242,6 @@ router.post("/nibss-webhook", async (req, res) => {
     }
   } catch (err) {
     console.error("Webhook processing error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
   }
 });
 async function handleDebitSuccess(data) {
@@ -282,7 +278,7 @@ async function handleDebitSuccess(data) {
       status: "success",
       prevBal,
       newBal,
-      reference: data.reference || undefined,
+      reference: "BN" + Math.floor(Math.random() * 5000).toString(),
     });
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
   } catch (error) {
@@ -322,7 +318,7 @@ async function handleCreditSuccess(data) {
       status: "success",
       prevBal,
       newBal,
-      reference,
+      reference: "BN" + Math.floor(Math.random() * 5000).toString(),
     });
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
   } catch (error) {
