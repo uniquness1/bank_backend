@@ -260,9 +260,7 @@ async function handleDebitSuccess(data) {
     const newBal = prevBal - amount;
     if (newBal < 0) throw new Error("Insufficient funds for debit");
     await Firestore.updateDocument("ACCOUNTS", account.id, {
-      ...account,
       balance: newBal,
-      updatedAt: new Date(),
     });
     const Transaction = (await import("../models/transactions.mjs")).default;
     const tx = new Transaction({
