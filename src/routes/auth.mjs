@@ -12,9 +12,10 @@ const router = express.Router();
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
-    return res
-      .status(401)
-      .json({ error: "Unauthorized: Missing or invalid token" });
+    return res.status(401).json({
+      error: "Unauthorized: Missing or invalid token",
+      code: "MISSING_TOKEN",
+    });
   }
   const idToken = authHeader;
   try {
@@ -22,7 +23,12 @@ const authenticateToken = async (req, res, next) => {
     req.user = decodedToken;
     next();
   } catch (error) {
-    res.status(401).json({ error: "Unauthorized: Invalid token" });
+    const isExpired = error.code === "auth/id-token-expired";
+    res.status(401).json({
+      error: "Unauthorized: Invalid token",
+      code: isExpired ? "TOKEN_EXPIRED" : "INVALID_TOKEN",
+      expired: isExpired,
+    });
   }
 };
 
@@ -316,62 +322,69 @@ router.post("/generate-account-number", authenticateToken, async (req, res) => {
 });
 
 const validateChangePin = [
-  body('oldPin').matches(/^\d{4}$/).withMessage('Old PIN must be a 4-digit number'),
-  body('newPin').matches(/^\d{4}$/).withMessage('New PIN must be a 4-digit number'),
-]
+  body("oldPin")
+    .matches(/^\d{4}$/)
+    .withMessage("Old PIN must be a 4-digit number"),
+  body("newPin")
+    .matches(/^\d{4}$/)
+    .withMessage("New PIN must be a 4-digit number"),
+];
 
 router.post(
-  '/change-pin',
+  "/change-pin",
   [authenticateToken, validateChangePin],
   async (req, res) => {
-    const errors = validationResult(req)
+    const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() })
+      return res.status(400).json({ errors: errors.array() });
     }
-    const { oldPin, newPin } = req.body
-    const userId = req.user.uid
+    const { oldPin, newPin } = req.body;
+    const userId = req.user.uid;
     try {
-      const userDocSnapshot = await Firestore.getSingleDoc('USERS', userId)
+      const userDocSnapshot = await Firestore.getSingleDoc("USERS", userId);
       if (!userDocSnapshot.exists()) {
-        return res.status(404).json({ error: 'User not found' })
+        return res.status(404).json({ error: "User not found" });
       }
-      const userDoc = userDocSnapshot.data()
-      const accountId = userDoc.accountId
+      const userDoc = userDocSnapshot.data();
+      const accountId = userDoc.accountId;
       if (!accountId) {
-        return res.status(404).json({ error: 'Account ID not found for user' })
+        return res.status(404).json({ error: "Account ID not found for user" });
       }
-      const accountDocSnapshot = await Firestore.getSingleDoc('ACCOUNTS', accountId)
+      const accountDocSnapshot = await Firestore.getSingleDoc(
+        "ACCOUNTS",
+        accountId
+      );
       if (!accountDocSnapshot.exists()) {
-        return res.status(404).json({ error: 'Account not found' })
+        return res.status(404).json({ error: "Account not found" });
       }
-      const accountData = accountDocSnapshot.data()
+      const accountData = accountDocSnapshot.data();
       if (!accountData.pin) {
-        return res.status(400).json({ error: 'No PIN set for this account' })
+        return res.status(400).json({ error: "No PIN set for this account" });
       }
-      const isOldPinValid = bcrypt.compareSync(oldPin, accountData.pin)
+      const isOldPinValid = bcrypt.compareSync(oldPin, accountData.pin);
       if (!isOldPinValid) {
-        return res.status(401).json({ error: 'Old PIN is incorrect' })
+        return res.status(401).json({ error: "Old PIN is incorrect" });
       }
-      const hashedNewPin = bcrypt.hashSync(newPin, 10)
-      await Firestore.updateDocument('ACCOUNTS', accountId, {
+      const hashedNewPin = bcrypt.hashSync(newPin, 10);
+      await Firestore.updateDocument("ACCOUNTS", accountId, {
         pin: hashedNewPin,
         updatedAt: new Date(),
-      })
-      res.status(200).json({ message: 'PIN changed successfully' })
+      });
+      res.status(200).json({ message: "PIN changed successfully" });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to change PIN' })
+      res.status(500).json({ error: "Failed to change PIN" });
     }
   }
-)
-router.post('/logout', authenticateToken, async (req, res) => {
-  const userId = req.user.uid
+);
+router.post("/logout", authenticateToken, async (req, res) => {
+  const userId = req.user.uid;
   try {
-    await Auth.logout(userId)
-    res.status(200).json({ message: 'Logged out successfully' })
+    await Auth.logout(userId);
+    res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to log out' })
+    res.status(500).json({ error: "Failed to log out" });
   }
-})
+});
 
 function generateAccountNumber() {
   return Math.floor(1000000000 + Math.random() * 9000000000).toString();
