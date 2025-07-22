@@ -285,9 +285,9 @@ async function handleDebitSuccess(data) {
     const tx = new Transaction({
       userId: account.userId,
       senderId: account.userId,
-      senderName: account.accountName,
+      senderName: data.metadata?.senderName || data.bankName || "",
       receiverId: null,
-      receiverName: data.metadata?.senderName || data.bankName || "",
+      receiverName: data.accountName,
       amount,
       mode: "DEBIT",
       description: data.metadata?.purpose || "Debit via NIBSS",
@@ -295,7 +295,7 @@ async function handleDebitSuccess(data) {
       status: "success",
       prevBal,
       newBal,
-      reference: "BN" + Math.floor(Math.random() * 5000).toString(),
+      reference: `DEP-${Date.now()}-${Math.random(Math.floor) * 100000000}`,
     });
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
     console.log(`Debit processed successfully for account ${accountNumber}`);
@@ -328,7 +328,7 @@ async function handleCreditSuccess(data) {
       senderId: data.metadata?.senderAccount || "",
       senderName: data.metadata?.senderName || data.bankName || "",
       receiverId: account.userId,
-      receiverName: account.accountName,
+      receiverName: data.accountName,
       amount,
       mode: "CREDIT",
       description: data.metadata?.description || "NIBSS Credit",
@@ -336,7 +336,7 @@ async function handleCreditSuccess(data) {
       status: "success",
       prevBal,
       newBal,
-      reference: "BN" + Math.floor(Math.random() * 5000).toString(),
+      reference: `DEP-${Date.now()}-${Math.random(Math.floor) * 100000000}`,
     });
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
   } catch (error) {
