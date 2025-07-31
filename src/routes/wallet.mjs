@@ -433,73 +433,61 @@ router.get("/transactions", async (req, res) => {
     if (type && (type === "CREDIT" || type === "DEBIT")) {
       allTransactions = allTransactions.filter((tx) => tx.mode === type);
     }
+    const convertToDate = (timestamp) => {
+      if (!timestamp) return new Date(0);
+      if (timestamp instanceof Date) {
+        return timestamp;
+      }
+      if (timestamp.seconds !== undefined) {
+        return new Date(
+          timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000
+        );
+      }
+      return new Date(timestamp);
+    };
     if (from) {
       const fromDate = new Date(from);
       fromDate.setHours(0, 0, 0, 0);
+
       allTransactions = allTransactions.filter((tx) => {
-        const txDate = tx.paidAt ? new Date(tx.paidAt) : new Date(tx.createdAt);
-        // Handle Firestore timestamp objects
-        if (txDate.seconds) {
-          const date = new Date(
-            txDate.seconds * 1000 + (txDate.nanoseconds || 0) / 1000000
-          );
-          return date >= fromDate;
-        }
+        const txDate = convertToDate(tx.paidAt || tx.createdAt);
         return txDate >= fromDate;
       });
     }
+
     if (to) {
       const toDate = new Date(to);
       toDate.setHours(23, 59, 59, 999);
+
       allTransactions = allTransactions.filter((tx) => {
-        const txDate = tx.paidAt ? new Date(tx.paidAt) : new Date(tx.createdAt);
-        // Handle Firestore timestamp objects
-        if (txDate.seconds) {
-          const date = new Date(
-            txDate.seconds * 1000 + (txDate.nanoseconds || 0) / 1000000
-          );
-          return date <= toDate;
-        }
+        const txDate = convertToDate(tx.paidAt || tx.createdAt);
         return txDate <= toDate;
       });
     }
-
-    const depositTransactions = allTransactions.sort((a, b) => {
-      const dateA = (a.paidAt || a.createdAt)?.seconds
-        ? new Date(
-            (a.paidAt?.seconds || a.createdAt?.seconds) * 1000 +
-              (a.paidAt?.nanoseconds || a.createdAt?.nanoseconds) / 1000000
-          )
-        : new Date(0);
-      const dateB = (b.paidAt || b.createdAt)?.seconds
-        ? new Date(
-            (b.paidAt?.seconds || b.createdAt?.seconds) * 1000 +
-              (b.paidAt?.nanoseconds || b.createdAt?.nanoseconds) / 1000000
-          )
-        : new Date(0);
+    const sortedTransactions = allTransactions.sort((a, b) => {
+      const dateA = convertToDate(a.paidAt || a.createdAt);
+      const dateB = convertToDate(b.paidAt || b.createdAt);
       return dateB - dateA;
     });
-
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + parseInt(limit);
-    const paginatedTransactions = depositTransactions.slice(
+    const paginatedTransactions = sortedTransactions.slice(
       startIndex,
       endIndex
     );
-
     res.status(200).json({
       transactions: paginatedTransactions,
       pagination: {
         currentPage: parseInt(page),
-        totalPages: Math.ceil(depositTransactions.length / limit),
-        totalTransactions: depositTransactions.length,
-        hasNext: endIndex < depositTransactions.length,
+        totalPages: Math.ceil(sortedTransactions.length / limit),
+        totalTransactions: sortedTransactions.length,
+        hasNext: endIndex < sortedTransactions.length,
         hasPrev: startIndex > 0,
       },
       status: true,
     });
   } catch (err) {
-    console.error("Error fetching deposit transactions:", err);
+    console.error("Error fetching transactions:", err);
     res.status(err.code || 500).json({
       message: err.message || "Internal server error",
       status: false,

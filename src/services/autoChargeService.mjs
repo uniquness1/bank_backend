@@ -34,11 +34,12 @@ class AutoChargeService {
   async processAutoCharges() {
     try {
       // Get all active savings with auto charge enabled
-      const allSavings = await Firestore.getAllDocuments("SAVINGS");
+      const allSavings = await Firestore.getAllDoc("SAVINGS");
 
-      for (const savingsDoc of allSavings) {
-        const savings = savingsDoc.data();
-        const savingsInstance = new Savings(savings);
+      for (const savingsData of allSavings) {
+        // savingsData is already the document data, not a Firestore document
+        // So we don't need to call .data() on it
+        const savingsInstance = new Savings(savingsData);
 
         // Check if auto charge should be triggered
         if (savingsInstance.shouldAutoCharge()) {
@@ -71,7 +72,7 @@ class AutoChargeService {
       // Check if main account has sufficient balance
       if (mainAccount.balance < savingsInstance.autoChargeAmount) {
         console.log(
-          `Insufficient balance for auto charge: ${savingsInstance.name}`
+          `Insufficient balance for auto charge: ${savingsInstance.name} - Required: ₦${savingsInstance.autoChargeAmount}, Available: ₦${mainAccount.balance}`
         );
         return;
       }
@@ -110,7 +111,7 @@ class AutoChargeService {
         mode: "DEBIT",
         description: `Auto charge to savings (${savingsInstance.name})`,
         paidAt: new Date(),
-        status: "success",
+        status: "SUCCESS", // Changed from "success" to "SUCCESS" for consistency
         prevBal: prevMainBal,
         newBal: mainAccount.balance,
         reference,
@@ -127,7 +128,7 @@ class AutoChargeService {
         mode: "CREDIT",
         description: `Auto charge to savings (${savingsInstance.name})`,
         paidAt: new Date(),
-        status: "success",
+        status: "SUCCESS", // Changed from "success" to "SUCCESS" for consistency
         prevBal: prevSavingsBal,
         newBal: savingsInstance.balance,
         reference,
@@ -174,6 +175,14 @@ class AutoChargeService {
   // Manually trigger auto charge processing (for testing)
   async triggerProcessing() {
     await this.processAutoCharges();
+  }
+
+  // Get service status
+  getStatus() {
+    return {
+      isRunning: this.isRunning,
+      intervalId: this.interval,
+    };
   }
 }
 

@@ -44,7 +44,5 @@ app.use("/api/cards", cardsRouter);
 
 app.listen(PORT, async () => {
   console.log(`Server is listening on http://localhost:${PORT}`);
-
-  // Start auto charge service
   autoChargeService.start();
 });
