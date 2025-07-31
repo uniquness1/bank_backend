@@ -82,21 +82,21 @@ router.post("/:id/deposit", authenticateUser, async (req, res) => {
     // Generate reference
     const reference = `SAVINGS_DEPOSIT_${savings.id}_${Date.now()}`;
     // Add transaction: DEBIT from main account
-    const mainTx = new Transaction({
-      userId: mainAccount.userId,
-      senderId: mainAccount.userId,
-      senderName: mainAccount.accountName,
-      receiverId: savings.id,
-      receiverName: savings.name,
-      amount: Number(amount),
-      mode: "DEBIT",
-      description: `Deposit to savings (${savings.name})`,
-      paidAt: new Date(),
-      status: "success",
-      prevBal: prevMainBal,
-      newBal: mainAccount.balance,
-      reference,
-    });
+    // const mainTx = new Transaction({
+    //   userId: mainAccount.userId,
+    //   senderId: mainAccount.userId,
+    //   senderName: mainAccount.accountName,
+    //   receiverId: savings.id,
+    //   receiverName: savings.name,
+    //   amount: Number(amount),
+    //   mode: "DEBIT",
+    //   description: `Deposit to savings (${savings.name})`,
+    //   paidAt: new Date(),
+    //   status: "success",
+    //   prevBal: prevMainBal,
+    //   newBal: mainAccount.balance,
+    //   reference,
+    // });
     // Add transaction: CREDIT to savings (for reference, not shown in user tx list)
     const savingsTx = new Transaction({
       userId: mainAccount.userId,
@@ -115,7 +115,7 @@ router.post("/:id/deposit", authenticateUser, async (req, res) => {
     });
     await Promise.all([
       Firestore.addDocWithId("TRANSACTIONS", mainTx.id, mainTx.toJSON()),
-      Firestore.addDocWithId("TRANSACTIONS", savingsTx.id, savingsTx.toJSON()),
+      // Firestore.addDocWithId("TRANSACTIONS", savingsTx.id, savingsTx.toJSON()),
     ]);
     res
       .status(200)
@@ -292,28 +292,24 @@ router.delete("/:id", authenticateUser, async (req, res) => {
         const prevMainBal = mainAccount.balance;
         const prevSavingsBal = savings.balance;
         mainAccount.balance += Number(savings.balance);
-
-        // Generate reference
         const reference = `SAVINGS_DELETE_${savings.id}_${Date.now()}`;
 
         // Add transaction: DEBIT from savings (for reference)
-        const savingsTx = new Transaction({
-          userId: mainAccount.userId,
-          senderId: savings.id,
-          senderName: savings.name,
-          receiverId: mainAccount.userId,
-          receiverName: mainAccount.accountName,
-          amount: Number(savings.balance),
-          mode: "DEBIT",
-          description: `Delete savings (${savings.name})`,
-          paidAt: new Date(),
-          status: "success",
-          prevBal: prevSavingsBal,
-          newBal: 0,
-          reference,
-        });
-
-        // Add transaction: CREDIT to main account
+        // const savingsTx = new Transaction({
+        //   userId: mainAccount.userId,
+        //   senderId: savings.id,
+        //   senderName: savings.name,
+        //   receiverId: mainAccount.userId,
+        //   receiverName: mainAccount.accountName,
+        //   amount: Number(savings.balance),
+        //   mode: "DEBIT",
+        //   description: `Delete savings (${savings.name})`,
+        //   paidAt: new Date(),
+        //   status: "success",
+        //   prevBal: prevSavingsBal,
+        //   newBal: 0,
+        //   reference,
+        // });
         const mainTx = new Transaction({
           userId: mainAccount.userId,
           senderId: savings.id,
@@ -332,11 +328,11 @@ router.delete("/:id", authenticateUser, async (req, res) => {
 
         await Promise.all([
           Firestore.updateDocument("ACCOUNTS", mainAccount.id, mainAccount),
-          Firestore.addDocWithId(
-            "TRANSACTIONS",
-            savingsTx.id,
-            savingsTx.toJSON()
-          ),
+          // Firestore.addDocWithId(
+          //   "TRANSACTIONS",
+          //   savingsTx.id,
+          //   savingsTx.toJSON()
+          // ),
           Firestore.addDocWithId("TRANSACTIONS", mainTx.id, mainTx.toJSON()),
         ]);
       }
@@ -374,21 +370,21 @@ router.patch("/:id/close", authenticateUser, async (req, res) => {
         // Generate reference
         const reference = `SAVINGS_CLOSE_${savings.id}_${Date.now()}`;
         // Add transaction: DEBIT from savings (for reference)
-        const savingsTx = new Transaction({
-          userId: mainAccount.userId,
-          senderId: savings.id,
-          senderName: savings.name,
-          receiverId: mainAccount.userId,
-          receiverName: mainAccount.accountName,
-          amount: Number(savings.balance),
-          mode: "DEBIT",
-          description: `Close savings (${savings.name})`,
-          paidAt: new Date(),
-          status: "success",
-          prevBal: prevSavingsBal,
-          newBal: 0,
-          reference,
-        });
+        // const savingsTx = new Transaction({
+        //   userId: mainAccount.userId,
+        //   senderId: savings.id,
+        //   senderName: savings.name,
+        //   receiverId: mainAccount.userId,
+        //   receiverName: mainAccount.accountName,
+        //   amount: Number(savings.balance),
+        //   mode: "DEBIT",
+        //   description: `Close savings (${savings.name})`,
+        //   paidAt: new Date(),
+        //   status: "success",
+        //   prevBal: prevSavingsBal,
+        //   newBal: 0,
+        //   reference,
+        // });
         // Add transaction: CREDIT to main account
         const mainTx = new Transaction({
           userId: mainAccount.userId,
@@ -407,11 +403,11 @@ router.patch("/:id/close", authenticateUser, async (req, res) => {
         });
         await Promise.all([
           Firestore.updateDocument("ACCOUNTS", mainAccount.id, mainAccount),
-          Firestore.addDocWithId(
-            "TRANSACTIONS",
-            savingsTx.id,
-            savingsTx.toJSON()
-          ),
+          // Firestore.addDocWithId(
+          //   "TRANSACTIONS",
+          //   savingsTx.id,
+          //   savingsTx.toJSON()
+          // ),
           Firestore.addDocWithId("TRANSACTIONS", mainTx.id, mainTx.toJSON()),
         ]);
       }

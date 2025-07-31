@@ -7,20 +7,15 @@ class AutoChargeService {
     this.isRunning = false;
     this.interval = null;
   }
-
-  // Start the auto charge service
   start() {
     if (this.isRunning) return;
 
     this.isRunning = true;
     this.interval = setInterval(async () => {
       await this.processAutoCharges();
-    }, 60000); // Check every minute
-
+    }, 60000);
     console.log("Auto charge service started");
   }
-
-  // Stop the auto charge service
   stop() {
     if (this.interval) {
       clearInterval(this.interval);
@@ -29,19 +24,12 @@ class AutoChargeService {
     this.isRunning = false;
     console.log("Auto charge service stopped");
   }
-
-  // Process all auto charges that are due
   async processAutoCharges() {
     try {
-      // Get all active savings with auto charge enabled
       const allSavings = await Firestore.getAllDoc("SAVINGS");
 
       for (const savingsData of allSavings) {
-        // savingsData is already the document data, not a Firestore document
-        // So we don't need to call .data() on it
         const savingsInstance = new Savings(savingsData);
-
-        // Check if auto charge should be triggered
         if (savingsInstance.shouldAutoCharge()) {
           await this.processAutoCharge(savingsInstance);
         }
@@ -51,10 +39,8 @@ class AutoChargeService {
     }
   }
 
-  // Process auto charge for a specific savings
   async processAutoCharge(savingsInstance) {
     try {
-      // Get main account
       const accounts = await Firestore.getAllQueryDoc(
         "ACCOUNTS",
         "userId",
@@ -68,16 +54,12 @@ class AutoChargeService {
         );
         return;
       }
-
-      // Check if main account has sufficient balance
       if (mainAccount.balance < savingsInstance.autoChargeAmount) {
         console.log(
           `Insufficient balance for auto charge: ${savingsInstance.name} - Required: ₦${savingsInstance.autoChargeAmount}, Available: ₦${mainAccount.balance}`
         );
         return;
       }
-
-      // Check if savings goal is completed
       if (savingsInstance.isCompleted()) {
         console.log(`Savings goal completed: ${savingsInstance.name}`);
         savingsInstance.disableAutoCharge();
@@ -88,16 +70,12 @@ class AutoChargeService {
         );
         return;
       }
-
-      // Process the auto charge
       const prevMainBal = mainAccount.balance;
       const prevSavingsBal = savingsInstance.balance;
 
       mainAccount.balance -= savingsInstance.autoChargeAmount;
       savingsInstance.balance += savingsInstance.autoChargeAmount;
       savingsInstance.updateAutoChargeSchedule();
-
-      // Generate reference
       const reference = `AUTO_CHARGE_${savingsInstance.id}_${Date.now()}`;
 
       // Add transaction: DEBIT from main account
@@ -116,24 +94,6 @@ class AutoChargeService {
         newBal: mainAccount.balance,
         reference,
       });
-
-      // Add transaction: CREDIT to savings (for reference)
-      const savingsTx = new Transaction({
-        userId: mainAccount.userId,
-        senderId: mainAccount.userId,
-        senderName: mainAccount.accountName,
-        receiverId: savingsInstance.id,
-        receiverName: savingsInstance.name,
-        amount: savingsInstance.autoChargeAmount,
-        mode: "CREDIT",
-        description: `Auto charge to savings (${savingsInstance.name})`,
-        paidAt: new Date(),
-        status: "SUCCESS", // Changed from "success" to "SUCCESS" for consistency
-        prevBal: prevSavingsBal,
-        newBal: savingsInstance.balance,
-        reference,
-      });
-
       // Update accounts and add transactions
       await Promise.all([
         Firestore.updateDocument("ACCOUNTS", mainAccount.id, mainAccount),
@@ -143,16 +103,7 @@ class AutoChargeService {
           savingsInstance.toJSON()
         ),
         Firestore.addDocWithId("TRANSACTIONS", mainTx.id, mainTx.toJSON()),
-        Firestore.addDocWithId(
-          "TRANSACTIONS",
-          savingsTx.id,
-          savingsTx.toJSON()
-        ),
       ]);
-
-      console.log(
-        `Auto charge processed: ${savingsInstance.name} - ₦${savingsInstance.autoChargeAmount}`
-      );
 
       // Check if goal is completed after this charge
       if (savingsInstance.isCompleted()) {
@@ -162,7 +113,6 @@ class AutoChargeService {
           savingsInstance.id,
           savingsInstance.toJSON()
         );
-        console.log(`Savings goal completed: ${savingsInstance.name}`);
       }
     } catch (error) {
       console.error(
