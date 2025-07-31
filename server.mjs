@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
-// routhe imports
+// route imports
 import authRoute from "./src/routes/auth.mjs";
 import userRoute from "./src/routes/user.mjs";
 import walletRoute from "./src/routes/wallet.mjs";
@@ -12,6 +12,9 @@ import cardsRouter from "./src/routes/cards.mjs";
 
 // middleware imports
 import authMiddleware from "./src/middlewares/auth.mjs";
+
+// services
+import autoChargeService from "./src/services/autoChargeService.mjs";
 
 dotenv.config();
 
@@ -41,4 +44,7 @@ app.use("/api/cards", cardsRouter);
 
 app.listen(PORT, async () => {
   console.log(`Server is listening on http://localhost:${PORT}`);
+
+  // Start auto charge service
+  autoChargeService.start();
 });

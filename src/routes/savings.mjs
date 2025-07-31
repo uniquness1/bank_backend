@@ -20,7 +20,8 @@ const authenticateUser = async (req, res, next) => {
 router.post("/", authenticateUser, async (req, res) => {
   try {
     const { name, targetAmount } = req.body;
-    if (!name || !targetAmount) return res.status(400).json({ error: "Name and target amount required" });
+    if (!name || !targetAmount)
+      return res.status(400).json({ error: "Name and target amount required" });
     const savings = new Savings({ userId: req.userId, name, targetAmount });
     await Firestore.addDocWithId("SAVINGS", savings.id, savings.toJSON());
     res.status(201).json({ message: "Savings created", savings });
@@ -32,7 +33,11 @@ router.post("/", authenticateUser, async (req, res) => {
 // Get all savings for user
 router.get("/", authenticateUser, async (req, res) => {
   try {
-    const savingsList = await Firestore.getAllQueryDoc("SAVINGS", "userId", req.userId);
+    const savingsList = await Firestore.getAllQueryDoc(
+      "SAVINGS",
+      "userId",
+      req.userId
+    );
     res.status(200).json({ savings: savingsList });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to fetch savings" });
@@ -43,16 +48,27 @@ router.get("/", authenticateUser, async (req, res) => {
 router.post("/:id/deposit", authenticateUser, async (req, res) => {
   try {
     const { amount } = req.body;
-    if (!amount || isNaN(amount) || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
+    if (!amount || isNaN(amount) || amount <= 0)
+      return res.status(400).json({ error: "Invalid amount" });
     const savingsDoc = await Firestore.getSingleDoc("SAVINGS", req.params.id);
-    if (!savingsDoc.exists()) return res.status(404).json({ error: "Savings not found" });
+    if (!savingsDoc.exists())
+      return res.status(404).json({ error: "Savings not found" });
     const savings = savingsDoc.data();
-    if (savings.userId !== req.userId) return res.status(403).json({ error: "Forbidden" });
+    if (savings.userId !== req.userId)
+      return res.status(403).json({ error: "Forbidden" });
     // Get main account
-    const accounts = await Firestore.getAllQueryDoc("ACCOUNTS", "userId", req.userId);
+    const accounts = await Firestore.getAllQueryDoc(
+      "ACCOUNTS",
+      "userId",
+      req.userId
+    );
     const mainAccount = accounts.length > 0 ? accounts[0] : null;
-    if (!mainAccount) return res.status(404).json({ error: "Main account not found" });
-    if (mainAccount.balance < amount) return res.status(400).json({ error: "Insufficient main account balance" });
+    if (!mainAccount)
+      return res.status(404).json({ error: "Main account not found" });
+    if (mainAccount.balance < amount)
+      return res
+        .status(400)
+        .json({ error: "Insufficient main account balance" });
     // Deduct from main, add to savings
     const prevMainBal = mainAccount.balance;
     const prevSavingsBal = savings.balance;
@@ -61,7 +77,7 @@ router.post("/:id/deposit", authenticateUser, async (req, res) => {
     savings.updatedAt = new Date();
     await Promise.all([
       Firestore.updateDocument("ACCOUNTS", mainAccount.id, mainAccount),
-      Firestore.updateDocument("SAVINGS", savings.id, savings)
+      Firestore.updateDocument("SAVINGS", savings.id, savings),
     ]);
     // Generate reference
     const reference = `SAVINGS_DEPOSIT_${savings.id}_${Date.now()}`;
@@ -101,7 +117,9 @@ router.post("/:id/deposit", authenticateUser, async (req, res) => {
       Firestore.addDocWithId("TRANSACTIONS", mainTx.id, mainTx.toJSON()),
       Firestore.addDocWithId("TRANSACTIONS", savingsTx.id, savingsTx.toJSON()),
     ]);
-    res.status(200).json({ message: "Deposit successful", savings, mainAccount });
+    res
+      .status(200)
+      .json({ message: "Deposit successful", savings, mainAccount });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to deposit" });
   }
@@ -111,16 +129,25 @@ router.post("/:id/deposit", authenticateUser, async (req, res) => {
 router.post("/:id/withdraw", authenticateUser, async (req, res) => {
   try {
     const { amount } = req.body;
-    if (!amount || isNaN(amount) || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
+    if (!amount || isNaN(amount) || amount <= 0)
+      return res.status(400).json({ error: "Invalid amount" });
     const savingsDoc = await Firestore.getSingleDoc("SAVINGS", req.params.id);
-    if (!savingsDoc.exists()) return res.status(404).json({ error: "Savings not found" });
+    if (!savingsDoc.exists())
+      return res.status(404).json({ error: "Savings not found" });
     const savings = savingsDoc.data();
-    if (savings.userId !== req.userId) return res.status(403).json({ error: "Forbidden" });
-    if (savings.balance < amount) return res.status(400).json({ error: "Insufficient savings balance" });
+    if (savings.userId !== req.userId)
+      return res.status(403).json({ error: "Forbidden" });
+    if (savings.balance < amount)
+      return res.status(400).json({ error: "Insufficient savings balance" });
     // Get main account
-    const accounts = await Firestore.getAllQueryDoc("ACCOUNTS", "userId", req.userId);
+    const accounts = await Firestore.getAllQueryDoc(
+      "ACCOUNTS",
+      "userId",
+      req.userId
+    );
     const mainAccount = accounts.length > 0 ? accounts[0] : null;
-    if (!mainAccount) return res.status(404).json({ error: "Main account not found" });
+    if (!mainAccount)
+      return res.status(404).json({ error: "Main account not found" });
     // Deduct from savings, add to main
     const prevSavingsBal = savings.balance;
     const prevMainBal = mainAccount.balance;
@@ -129,7 +156,7 @@ router.post("/:id/withdraw", authenticateUser, async (req, res) => {
     savings.updatedAt = new Date();
     await Promise.all([
       Firestore.updateDocument("SAVINGS", savings.id, savings),
-      Firestore.updateDocument("ACCOUNTS", mainAccount.id, mainAccount)
+      Firestore.updateDocument("ACCOUNTS", mainAccount.id, mainAccount),
     ]);
     // Generate reference
     const reference = `SAVINGS_WITHDRAW_${savings.id}_${Date.now()}`;
@@ -169,9 +196,161 @@ router.post("/:id/withdraw", authenticateUser, async (req, res) => {
       Firestore.addDocWithId("TRANSACTIONS", savingsTx.id, savingsTx.toJSON()),
       Firestore.addDocWithId("TRANSACTIONS", mainTx.id, mainTx.toJSON()),
     ]);
-    res.status(200).json({ message: "Withdrawal successful", savings, mainAccount });
+    res
+      .status(200)
+      .json({ message: "Withdrawal successful", savings, mainAccount });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to withdraw" });
+  }
+});
+
+// Setup auto charge for savings
+router.post("/:id/auto-charge", authenticateUser, async (req, res) => {
+  try {
+    const { amount, intervalMinutes } = req.body;
+    if (!amount || !intervalMinutes || amount <= 0 || intervalMinutes <= 0) {
+      return res
+        .status(400)
+        .json({ error: "Valid amount and interval required" });
+    }
+
+    const savingsDoc = await Firestore.getSingleDoc("SAVINGS", req.params.id);
+    if (!savingsDoc.exists())
+      return res.status(404).json({ error: "Savings not found" });
+    const savings = savingsDoc.data();
+    if (savings.userId !== req.userId)
+      return res.status(403).json({ error: "Forbidden" });
+
+    // Create savings instance and setup auto charge
+    const savingsInstance = new Savings(savings);
+    savingsInstance.setupAutoCharge(Number(amount), Number(intervalMinutes));
+
+    await Firestore.updateDocument(
+      "SAVINGS",
+      savings.id,
+      savingsInstance.toJSON()
+    );
+    res
+      .status(200)
+      .json({
+        message: "Auto charge setup successful",
+        savings: savingsInstance.toJSON(),
+      });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ error: err.message || "Failed to setup auto charge" });
+  }
+});
+
+// Disable auto charge
+router.delete("/:id/auto-charge", authenticateUser, async (req, res) => {
+  try {
+    const savingsDoc = await Firestore.getSingleDoc("SAVINGS", req.params.id);
+    if (!savingsDoc.exists())
+      return res.status(404).json({ error: "Savings not found" });
+    const savings = savingsDoc.data();
+    if (savings.userId !== req.userId)
+      return res.status(403).json({ error: "Forbidden" });
+
+    const savingsInstance = new Savings(savings);
+    savingsInstance.disableAutoCharge();
+
+    await Firestore.updateDocument(
+      "SAVINGS",
+      savings.id,
+      savingsInstance.toJSON()
+    );
+    res
+      .status(200)
+      .json({
+        message: "Auto charge disabled",
+        savings: savingsInstance.toJSON(),
+      });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ error: err.message || "Failed to disable auto charge" });
+  }
+});
+
+// Delete savings goal
+router.delete("/:id", authenticateUser, async (req, res) => {
+  try {
+    const savingsDoc = await Firestore.getSingleDoc("SAVINGS", req.params.id);
+    if (!savingsDoc.exists())
+      return res.status(404).json({ error: "Savings not found" });
+    const savings = savingsDoc.data();
+    if (savings.userId !== req.userId)
+      return res.status(403).json({ error: "Forbidden" });
+
+    // If balance > 0, transfer to main account first
+    if (savings.balance > 0) {
+      const accounts = await Firestore.getAllQueryDoc(
+        "ACCOUNTS",
+        "userId",
+        req.userId
+      );
+      const mainAccount = accounts.length > 0 ? accounts[0] : null;
+      if (mainAccount) {
+        const prevMainBal = mainAccount.balance;
+        const prevSavingsBal = savings.balance;
+        mainAccount.balance += Number(savings.balance);
+
+        // Generate reference
+        const reference = `SAVINGS_DELETE_${savings.id}_${Date.now()}`;
+
+        // Add transaction: DEBIT from savings (for reference)
+        const savingsTx = new Transaction({
+          userId: mainAccount.userId,
+          senderId: savings.id,
+          senderName: savings.name,
+          receiverId: mainAccount.userId,
+          receiverName: mainAccount.accountName,
+          amount: Number(savings.balance),
+          mode: "DEBIT",
+          description: `Delete savings (${savings.name})`,
+          paidAt: new Date(),
+          status: "success",
+          prevBal: prevSavingsBal,
+          newBal: 0,
+          reference,
+        });
+
+        // Add transaction: CREDIT to main account
+        const mainTx = new Transaction({
+          userId: mainAccount.userId,
+          senderId: savings.id,
+          senderName: savings.name,
+          receiverId: mainAccount.userId,
+          receiverName: mainAccount.accountName,
+          amount: Number(savings.balance),
+          mode: "CREDIT",
+          description: `Delete savings (${savings.name})`,
+          paidAt: new Date(),
+          status: "success",
+          prevBal: prevMainBal,
+          newBal: mainAccount.balance,
+          reference,
+        });
+
+        await Promise.all([
+          Firestore.updateDocument("ACCOUNTS", mainAccount.id, mainAccount),
+          Firestore.addDocWithId(
+            "TRANSACTIONS",
+            savingsTx.id,
+            savingsTx.toJSON()
+          ),
+          Firestore.addDocWithId("TRANSACTIONS", mainTx.id, mainTx.toJSON()),
+        ]);
+      }
+    }
+
+    // Delete the savings document
+    await Firestore.deleteDocument("SAVINGS", savings.id);
+    res.status(200).json({ message: "Savings deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message || "Failed to delete savings" });
   }
 });
 
@@ -179,12 +358,18 @@ router.post("/:id/withdraw", authenticateUser, async (req, res) => {
 router.patch("/:id/close", authenticateUser, async (req, res) => {
   try {
     const savingsDoc = await Firestore.getSingleDoc("SAVINGS", req.params.id);
-    if (!savingsDoc.exists()) return res.status(404).json({ error: "Savings not found" });
+    if (!savingsDoc.exists())
+      return res.status(404).json({ error: "Savings not found" });
     const savings = savingsDoc.data();
-    if (savings.userId !== req.userId) return res.status(403).json({ error: "Forbidden" });
+    if (savings.userId !== req.userId)
+      return res.status(403).json({ error: "Forbidden" });
     // If balance > 0, transfer to main account and record transaction
     if (savings.balance > 0) {
-      const accounts = await Firestore.getAllQueryDoc("ACCOUNTS", "userId", req.userId);
+      const accounts = await Firestore.getAllQueryDoc(
+        "ACCOUNTS",
+        "userId",
+        req.userId
+      );
       const mainAccount = accounts.length > 0 ? accounts[0] : null;
       if (mainAccount) {
         const prevMainBal = mainAccount.balance;
@@ -226,7 +411,11 @@ router.patch("/:id/close", authenticateUser, async (req, res) => {
         });
         await Promise.all([
           Firestore.updateDocument("ACCOUNTS", mainAccount.id, mainAccount),
-          Firestore.addDocWithId("TRANSACTIONS", savingsTx.id, savingsTx.toJSON()),
+          Firestore.addDocWithId(
+            "TRANSACTIONS",
+            savingsTx.id,
+            savingsTx.toJSON()
+          ),
           Firestore.addDocWithId("TRANSACTIONS", mainTx.id, mainTx.toJSON()),
         ]);
       }
@@ -241,4 +430,4 @@ router.patch("/:id/close", authenticateUser, async (req, res) => {
   }
 });
 
-export default router; 
+export default router;

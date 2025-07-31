@@ -17,6 +17,9 @@ class Transaction {
     newBal,
     createdAt = new Date(),
     reference,
+    vatAmount = 0,
+    nibssAmount = 0,
+    isTaxed = false,
   }) {
     this.id = id;
     this.userId = userId;
@@ -33,6 +36,9 @@ class Transaction {
     this.newBal = newBal;
     this.createdAt = createdAt;
     this.reference = reference;
+    this.vatAmount = vatAmount;
+    this.nibssAmount = nibssAmount;
+    this.isTaxed = isTaxed;
   }
 
   toJSON() {
@@ -52,6 +58,9 @@ class Transaction {
       newBal: this.newBal,
       createdAt: this.createdAt,
       reference: this.reference,
+      vatAmount: this.vatAmount,
+      nibssAmount: this.nibssAmount,
+      isTaxed: this.isTaxed,
     };
   }
 }

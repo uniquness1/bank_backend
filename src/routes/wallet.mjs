@@ -3,6 +3,7 @@ import crypto from "crypto";
 import adminService from "../services/auth.mjs";
 import { Firestore } from "../database/db.mjs";
 import Transaction from "../models/transactions.mjs";
+import taxService from "../services/taxService.mjs";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -192,15 +193,26 @@ router.post("/transfer/:accountNumber/:amount", async (req, res) => {
     if (senderWallet.accountNumber === accountNumber) {
       throw { message: "You can't transfer to yourself", code: 400 };
     }
-    if (senderWallet.balance < amount) {
+    // Calculate taxes
+    const dailyTransactionCount = await taxService.getDailyTransactionCount(
+      userCred.uid
+    );
+    const taxCalculation = taxService.calculateTaxes(
+      amount,
+      dailyTransactionCount
+    );
+    const totalAmountWithTax = amount + taxCalculation.totalTax;
+
+    if (senderWallet.balance < totalAmountWithTax) {
       throw { message: "Insufficient funds", code: 400 };
     }
 
     const senderPrevBal = senderWallet.balance;
-    const senderNewBal = senderWallet.balance - amount;
+    const senderNewBal = senderWallet.balance - totalAmountWithTax;
     const receiverPrevBal = receiverWallet.balance;
-    const receiverNewBal = receiverWallet.balance + amount;
+    const receiverNewBal = receiverWallet.balance + amount; // Receiver gets original amount
     senderWallet.balance = senderNewBal;
+
     const senderTransaction = new Transaction({
       userId: senderWallet.userId,
       senderId: senderWallet.userId,
@@ -214,7 +226,11 @@ router.post("/transfer/:accountNumber/:amount", async (req, res) => {
       status: "success",
       prevBal: senderPrevBal,
       newBal: senderNewBal,
+      vatAmount: taxCalculation.vatAmount,
+      nibssAmount: taxCalculation.nibssAmount,
+      isTaxed: taxCalculation.isTaxed,
     });
+
     const receiverTransaction = new Transaction({
       userId: receiverWallet.userId,
       senderId: senderWallet.userId,
@@ -380,6 +396,28 @@ router.post(
   }
 );
 
+// Get free transactions left for the day
+router.get("/free-transactions-left", async (req, res) => {
+  try {
+    const token = req.headers.authorization;
+    const userCred = await authenticateUser(token);
+    const freeTransactionsLeft = await taxService.getFreeTransactionsLeft(
+      userCred.uid
+    );
+
+    res.status(200).json({
+      data: { freeTransactionsLeft },
+      status: true,
+    });
+  } catch (err) {
+    console.error("Error fetching free transactions left:", err);
+    res.status(err.code || 500).json({
+      message: err.message || "Internal server error",
+      status: false,
+    });
+  }
+});
+
 // deposit history
 router.get("/transactions", async (req, res) => {
   try {
@@ -392,24 +430,36 @@ router.get("/transactions", async (req, res) => {
       "userId",
       userCred.uid
     );
-
-    // Filter by type if provided
     if (type && (type === "CREDIT" || type === "DEBIT")) {
-      allTransactions = allTransactions.filter(tx => tx.mode === type);
+      allTransactions = allTransactions.filter((tx) => tx.mode === type);
     }
-
-    // Filter by date range if provided
     if (from) {
       const fromDate = new Date(from);
-      allTransactions = allTransactions.filter(tx => {
+      fromDate.setHours(0, 0, 0, 0);
+      allTransactions = allTransactions.filter((tx) => {
         const txDate = tx.paidAt ? new Date(tx.paidAt) : new Date(tx.createdAt);
+        // Handle Firestore timestamp objects
+        if (txDate.seconds) {
+          const date = new Date(
+            txDate.seconds * 1000 + (txDate.nanoseconds || 0) / 1000000
+          );
+          return date >= fromDate;
+        }
         return txDate >= fromDate;
       });
     }
     if (to) {
       const toDate = new Date(to);
-      allTransactions = allTransactions.filter(tx => {
+      toDate.setHours(23, 59, 59, 999);
+      allTransactions = allTransactions.filter((tx) => {
         const txDate = tx.paidAt ? new Date(tx.paidAt) : new Date(tx.createdAt);
+        // Handle Firestore timestamp objects
+        if (txDate.seconds) {
+          const date = new Date(
+            txDate.seconds * 1000 + (txDate.nanoseconds || 0) / 1000000
+          );
+          return date <= toDate;
+        }
         return txDate <= toDate;
       });
     }
@@ -480,7 +530,6 @@ router.get("/deposit/verify/:reference", async (req, res) => {
   }
 });
 
-//webhook
 const handleSuccessfulDeposit = async (paymentData) => {
   try {
     const { reference, metadata, amount, paid_at } = paymentData;
