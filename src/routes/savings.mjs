@@ -230,12 +230,10 @@ router.post("/:id/auto-charge", authenticateUser, async (req, res) => {
       savings.id,
       savingsInstance.toJSON()
     );
-    res
-      .status(200)
-      .json({
-        message: "Auto charge setup successful",
-        savings: savingsInstance.toJSON(),
-      });
+    res.status(200).json({
+      message: "Auto charge setup successful",
+      savings: savingsInstance.toJSON(),
+    });
   } catch (err) {
     res
       .status(500)
@@ -261,12 +259,10 @@ router.delete("/:id/auto-charge", authenticateUser, async (req, res) => {
       savings.id,
       savingsInstance.toJSON()
     );
-    res
-      .status(200)
-      .json({
-        message: "Auto charge disabled",
-        savings: savingsInstance.toJSON(),
-      });
+    res.status(200).json({
+      message: "Auto charge disabled",
+      savings: savingsInstance.toJSON(),
+    });
   } catch (err) {
     res
       .status(500)
@@ -347,7 +343,7 @@ router.delete("/:id", authenticateUser, async (req, res) => {
     }
 
     // Delete the savings document
-    await Firestore.deleteDocument("SAVINGS", savings.id);
+    await Firestore.removeDoc("SAVINGS", savings.id);
     res.status(200).json({ message: "Savings deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to delete savings" });
