@@ -514,9 +514,6 @@ async function handleCreditSuccess(data) {
     });
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
 
-    // ==========================
-    // Apply NIBSS ₦50 DEBIT if applicable
-    // ==========================
     const NIBSS_AMOUNT = 50;
     const TAX_THRESHOLD = 10000;
 

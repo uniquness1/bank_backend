@@ -438,9 +438,11 @@ router.get("/transactions", async (req, res) => {
       "userId",
       userCred.uid
     );
+
     if (type && (type === "CREDIT" || type === "DEBIT")) {
       allTransactions = allTransactions.filter((tx) => tx.mode === type);
     }
+
     const convertToDate = (timestamp) => {
       if (!timestamp) return new Date(0);
       if (timestamp instanceof Date) {
@@ -453,9 +455,12 @@ router.get("/transactions", async (req, res) => {
       }
       return new Date(timestamp);
     };
+
+    // Fixed date filtering with proper timezone handling
     if (from) {
-      const fromDate = new Date(from);
-      fromDate.setHours(0, 0, 0, 0);
+      // Parse the date string in the server's timezone (Africa/Lagos)
+      const fromDate = new Date(from + "T00:00:00"); // Add time to ensure local timezone
+      console.log("From date filter:", fromDate.toString());
 
       allTransactions = allTransactions.filter((tx) => {
         const txDate = convertToDate(tx.paidAt || tx.createdAt);
@@ -464,25 +469,40 @@ router.get("/transactions", async (req, res) => {
     }
 
     if (to) {
-      const toDate = new Date(to);
-      toDate.setHours(23, 59, 59, 999);
+      // Parse the date string in the server's timezone (Africa/Lagos)
+      const toDate = new Date(to + "T23:59:59.999"); // Add time to ensure local timezone
+      console.log("To date filter:", toDate.toString());
 
       allTransactions = allTransactions.filter((tx) => {
         const txDate = convertToDate(tx.paidAt || tx.createdAt);
         return txDate <= toDate;
       });
     }
+
     const sortedTransactions = allTransactions.sort((a, b) => {
       const dateA = convertToDate(a.paidAt || a.createdAt);
       const dateB = convertToDate(b.paidAt || b.createdAt);
       return dateB - dateA;
     });
+
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + parseInt(limit);
     const paginatedTransactions = sortedTransactions.slice(
       startIndex,
       endIndex
     );
+
+    // Add debug info to see what's happening
+    console.log("Total transactions found:", sortedTransactions.length);
+    if (sortedTransactions.length > 0) {
+      console.log(
+        "Latest transaction date:",
+        convertToDate(
+          sortedTransactions[0].paidAt || sortedTransactions[0].createdAt
+        ).toString()
+      );
+    }
+
     res.status(200).json({
       transactions: paginatedTransactions,
       pagination: {

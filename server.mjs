@@ -1,8 +1,8 @@
+process.env.TZ = "Africa/Lagos";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
-// route imports
 import authRoute from "./src/routes/auth.mjs";
 import userRoute from "./src/routes/user.mjs";
 import walletRoute from "./src/routes/wallet.mjs";
@@ -10,10 +10,7 @@ import banksRoute from "./src/routes/banks.mjs";
 import savingsRouter from "./src/routes/savings.mjs";
 import cardsRouter from "./src/routes/cards.mjs";
 
-// middleware imports
 import authMiddleware from "./src/middlewares/auth.mjs";
-
-// services
 import autoChargeService from "./src/services/autoChargeService.mjs";
 
 dotenv.config();
@@ -34,7 +31,6 @@ app.use(
   "/api/deposits/paystack-webhook",
   express.raw({ type: "application/json" })
 );
-// routes
 app.use("/auth", authRoute);
 app.use("/user", authMiddleware, userRoute);
 app.use("/wallet", walletRoute);
