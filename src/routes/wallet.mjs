@@ -265,8 +265,16 @@ router.post("/transfer/:accountNumber/:amount", async (req, res) => {
       ),
     ]);
 
+    // Increment transaction count and get updated free transactions count
+    await taxService.incrementTransactionCount(userCred.uid);
+    const updatedFreeTransactionsLeft =
+      await taxService.getFreeTransactionsLeft(userCred.uid);
+
     res.status(200).json({
-      data: { message: "Money sent successfully" },
+      data: {
+        message: "Money sent successfully",
+        freeTransactionsLeft: updatedFreeTransactionsLeft,
+      },
       status: true,
     });
   } catch (err) {

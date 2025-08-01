@@ -1,6 +1,7 @@
 import express from "express";
 import adminService from "../services/auth.mjs";
 import { Firestore } from "../database/db.mjs";
+import taxService from "../services/taxService.mjs";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -110,7 +111,6 @@ router.post("/validate-account", async (req, res) => {
     });
   }
 });
-
 router.post("/transfer", async (req, res) => {
   try {
     const token = req.headers.authorization;
@@ -143,7 +143,6 @@ router.post("/transfer", async (req, res) => {
           "Missing required fields: bankCode, bankName, accountNo, accountName, amount, pin",
       });
     }
-
     if (typeof pin !== "string" || !/^\d{4}$/.test(pin)) {
       return res.status(400).json({ message: "Invalid PIN format" });
     }
@@ -153,21 +152,36 @@ router.post("/transfer", async (req, res) => {
       userCred.uid
     );
     const senderWallet = senderResponse.length > 0 ? senderResponse[0] : {};
+
     if (!senderWallet.id) {
       return res
         .status(404)
         .json({ message: "You don't have an active account" });
     }
+
     if (!senderWallet.pin) {
       return res.status(400).json({ message: "No PIN set for this account" });
     }
     const Accounts = (await import("../models/Accounts.mjs")).default;
     const senderAccountInstance = new Accounts(senderWallet);
+
     if (!senderAccountInstance.isPinValid(pin)) {
       return res.status(401).json({ message: "Invalid PIN" });
     }
     if (senderWallet.balance < amount) {
       return res.status(400).json({ message: "Insufficient funds" });
+    }
+    const senderBankName = senderWallet.bankName || "Banka";
+    const isSameBankTransfer =
+      senderBankName.toLowerCase() === "banka" &&
+      bankName.toLowerCase() === "banka";
+    const shouldApplyTax = !isSameBankTransfer;
+    const dailyTransactionCount = await taxService.getDailyTransactionCount(
+      userCred.uid
+    );
+    let taxCalculation = { vatAmount: 0, nibssAmount: 0, isTaxed: false };
+    if (shouldApplyTax) {
+      taxCalculation = taxService.calculateTaxes(amount, dailyTransactionCount);
     }
     const transferPayload = {
       bankCode,
@@ -175,7 +189,22 @@ router.post("/transfer", async (req, res) => {
       accountNo,
       accountName,
       amount,
-      metadata: metadata || {},
+      metadata: {
+        ...metadata,
+        senderUserId: userCred.uid,
+        senderAccount: senderWallet.accountNumber,
+        senderName: senderWallet.accountName,
+        senderAccountId: senderWallet.id,
+        senderBankName: senderBankName,
+        transferType: "external",
+        purpose: metadata?.purpose || description || "External Transfer",
+        vatAmount: taxCalculation.vatAmount,
+        nibssAmount: taxCalculation.nibssAmount,
+        isTaxed: taxCalculation.isTaxed,
+        shouldApplyTax: shouldApplyTax,
+        isSameBankTransfer: isSameBankTransfer,
+        dailyTransactionCount: dailyTransactionCount,
+      },
     };
 
     const response = await fetch(
@@ -191,22 +220,34 @@ router.post("/transfer", async (req, res) => {
         body: JSON.stringify(transferPayload),
       }
     );
+
     if (!response.ok) {
       const errorBody = await response.text();
       throw new Error(
         `HTTP error! status: ${response.status}, body: ${errorBody}`
       );
     }
+
     const result = await response.json();
+    const currentFreeTransactionsLeft =
+      await taxService.getFreeTransactionsLeft(userCred.uid);
+
     return res.status(200).json({
-      message: "Transfer successful",
-      data: result,
+      message: "Transfer initiated successfully",
+      data: {
+        ...result,
+        freeTransactionsLeft: currentFreeTransactionsLeft,
+        shouldApplyTax: shouldApplyTax,
+        isSameBankTransfer: isSameBankTransfer,
+        taxInfo: shouldApplyTax ? taxCalculation : null,
+        note: "Transaction will be processed when confirmed by the payment provider",
+      },
       status: true,
     });
   } catch (err) {
-    console.error("Transfer failed:", err);
-    return res.status(err.code || 500).json({
-      message: err.message || "Transfer failed",
+    console.error("Transfer initiation failed:", err);
+    return res.status(500).json({
+      message: err.message || "Transfer initiation failed",
       status: false,
     });
   }
@@ -223,12 +264,14 @@ router.post("/nibss-webhook", async (req, res) => {
     }
     res.sendStatus(200);
     if (!req.body || !req.body.event) {
+      console.log("Invalid webhook body:", req.body);
       return res.status(400).json({
         success: false,
         message: "Invalid request body",
       });
     }
     const { event, data } = req.body;
+    console.log(`Processing webhook event: ${event}`);
     switch (event) {
       case "transfer.debit.success":
         await handleDebitSuccess(data);
@@ -244,101 +287,286 @@ router.post("/nibss-webhook", async (req, res) => {
     console.error("Webhook processing error:", err);
   }
 });
+
 async function handleDebitSuccess(data) {
   try {
-    console.log("Processing debit success:", data);
+    console.log("[Webhook] === PROCESSING DEBIT SUCCESS ===");
+    console.log("[Webhook] Webhook data:", JSON.stringify(data, null, 2));
+
     if (!data || !data.metadata || !data.metadata.senderAccount) {
       throw new Error(
-        "Missing required data: metadata.accountNumber is required"
+        "Missing required data: metadata.senderAccount is required"
       );
     }
+
     if (!data.amount) {
       throw new Error("Missing required data: amount is required");
     }
-    let datam = data.metadata;
-    const accountNumber = datam.senderAccount;
-    if (!accountNumber) {
-      throw new Error("Account number is required but not provided");
+
+    const metadata = data.metadata;
+    const accountNumber = metadata.senderAccount;
+    const amount = Number(data.amount);
+
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error("Invalid amount: must be a positive number");
     }
+
     const accountQuery = await Firestore.getAllQueryDoc(
       "ACCOUNTS",
       "accountNumber",
       accountNumber
     );
     const account = accountQuery.length > 0 ? accountQuery[0] : null;
+
     if (!account) {
       throw new Error(`Account not found for account number: ${accountNumber}`);
     }
-    const prevBal = account.balance;
-    const amount = Number(data.amount);
-    if (isNaN(amount) || amount <= 0) {
-      throw new Error("Invalid amount: must be a positive number");
+
+    const reference =
+      data.reference ||
+      `TRANSFER_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+
+    // Check for duplicates
+    const existingTransactions = await Firestore.getAllQueryDoc(
+      "TRANSACTIONS",
+      "reference",
+      reference
+    );
+    if (existingTransactions.length > 0) {
+      console.log(
+        `[Webhook] Transaction with reference ${reference} already exists, skipping`
+      );
+      return;
     }
+
+    // Additional duplicate check
+    const recentTransactions = await Firestore.getAllQueryDoc(
+      "TRANSACTIONS",
+      "userId",
+      account.userId
+    );
+    const now = new Date();
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
+    const recentDuplicate = recentTransactions.find(
+      (tx) =>
+        tx.amount === amount &&
+        tx.mode === "DEBIT" &&
+        tx.status === "success" &&
+        new Date(tx.paidAt) > fiveMinutesAgo
+    );
+
+    if (recentDuplicate) {
+      console.log(
+        `[Webhook] Recent duplicate transaction found, skipping processing`
+      );
+      return;
+    }
+
+    // Update account balance
+    const prevBal = account.balance;
     const newBal = prevBal - amount;
+
     if (newBal < 0) {
       throw new Error("Insufficient funds for debit");
     }
-    await Firestore.updateDocument("ACCOUNTS", account.id, {
-      balance: newBal,
-    });
-    const Transaction = (await import("../models/transactions.mjs")).default;
-    const tx = new Transaction({
+
+    await Firestore.updateDocument("ACCOUNTS", account.id, { balance: newBal });
+
+    // Get tax information
+    const isExternalTransfer = metadata.transferType === "external";
+    const shouldApplyTax = metadata.shouldApplyTax === true;
+    const isSameBankTransfer = metadata.isSameBankTransfer === true;
+
+    console.log(
+      `[Webhook] External: ${isExternalTransfer}, Apply tax: ${shouldApplyTax}, Same bank: ${isSameBankTransfer}`
+    );
+
+    // Create transaction
+    const transactionData = {
       userId: account.userId,
       senderId: account.userId,
-      senderName: data.metadata?.senderName || data.bankName || "",
+      senderName: metadata.senderName || account.accountName,
       receiverId: null,
       receiverName: data.accountName,
       amount,
       mode: "DEBIT",
-      description: data.metadata?.purpose || "Debit via NIBSS",
-      paidAt: new Date(),
+      description: metadata.purpose || "Transfer",
+      paidAt: new Date().toISOString(), // Ensure consistent timestamp
       status: "success",
       prevBal,
       newBal,
-      reference: `DEP-${Date.now()}-${Math.random(Math.floor) * 100000000}`,
-    });
+      reference,
+    };
+
+    if (isExternalTransfer) {
+      transactionData.vatAmount = shouldApplyTax ? metadata.vatAmount || 0 : 0;
+      transactionData.nibssAmount = shouldApplyTax
+        ? metadata.nibssAmount || 0
+        : 0;
+      transactionData.isTaxed = shouldApplyTax && metadata.isTaxed;
+      transactionData.bankCode = data.bankCode;
+      transactionData.bankName = data.bankName;
+      transactionData.externalTransfer = true;
+      transactionData.isSameBankTransfer = isSameBankTransfer;
+    }
+
+    const Transaction = (await import("../models/transactions.mjs")).default;
+    const tx = new Transaction(transactionData);
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
-    console.log(`Debit processed successfully for account ${accountNumber}`);
+
+    console.log(`[Webhook] Transaction created in database with ID: ${tx.id}`);
+
+    // Increment transaction count
+    if (metadata.senderUserId) {
+      console.log(
+        `[Webhook] Incrementing transaction count for user ${metadata.senderUserId}`
+      );
+      await taxService.incrementTransactionCount(metadata.senderUserId);
+      const freeTransactionsLeft = await taxService.getFreeTransactionsLeft(
+        metadata.senderUserId
+      );
+      console.log(
+        `[Webhook] Transaction count updated to: ${newCount}, Free left: ${freeTransactionsLeft}`
+      );
+    }
+
+    console.log(
+      `[Webhook] ${
+        isExternalTransfer ? "External" : "Internal"
+      } debit transaction created successfully`
+    );
+    console.log(`[Webhook] Account ${accountNumber}: ${prevBal} -> ${newBal}`);
+    console.log(
+      `[Webhook] Tax applied: ${
+        shouldApplyTax ? "Yes" : "No"
+      } (Same bank: ${isSameBankTransfer})`
+    );
   } catch (error) {
-    console.error("Error processing debit success:", error);
+    console.error("[Webhook] Error processing debit success:", error);
     throw error;
   }
 }
 async function handleCreditSuccess(data) {
   try {
-    console.log("Processing credit success:", data);
+    console.log("=== PROCESSING CREDIT SUCCESS ===");
+    console.log("Webhook data:", JSON.stringify(data, null, 2));
+
     const accountQuery = await Firestore.getAllQueryDoc(
       "ACCOUNTS",
       "accountNumber",
       data.accountNumber
     );
     const account = accountQuery.length > 0 ? accountQuery[0] : null;
-    if (!account) throw new Error("Account not found");
-    const prevBal = account.balance;
+
+    if (!account) {
+      throw new Error("Account not found");
+    }
+
     const amount = Number(data.amount);
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error("Invalid or missing amount");
+    }
+
+    const reference =
+      data.reference ||
+      `CREDIT_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+
+    // Prevent duplicate credit
+    const existingTransactions = await Firestore.getAllQueryDoc(
+      "TRANSACTIONS",
+      "reference",
+      reference
+    );
+    if (existingTransactions.length > 0) {
+      console.log(
+        `Credit transaction with reference ${reference} already exists, skipping`
+      );
+      return;
+    }
+
+    const prevBal = account.balance;
     const newBal = prevBal + amount;
+
+    // Update account balance (before NIBSS charge)
     await Firestore.updateDocument("ACCOUNTS", account.id, {
-      ...account,
       balance: newBal,
       updatedAt: new Date(),
     });
+
     const Transaction = (await import("../models/transactions.mjs")).default;
+
+    // Save CREDIT transaction
     const tx = new Transaction({
       userId: account.userId,
-      senderId: data.metadata?.senderAccount || "",
+      senderId: data.metadata?.senderUserId || null,
       senderName: data.metadata?.senderName || data.bankName || "",
       receiverId: account.userId,
       receiverName: data.accountName,
       amount,
       mode: "CREDIT",
-      description: data.metadata?.description || "NIBSS Credit",
+      description: data.metadata?.description || "Incoming Transfer",
       paidAt: new Date(),
       status: "success",
       prevBal,
       newBal,
-      reference: `DEP-${Date.now()}-${Math.random(Math.floor) * 100000000}`,
+      reference,
     });
     await Firestore.addDocWithId("TRANSACTIONS", tx.id, tx.toJSON());
+
+    // ==========================
+    // Apply NIBSS ₦50 DEBIT if applicable
+    // ==========================
+    const NIBSS_AMOUNT = 50;
+    const TAX_THRESHOLD = 10000;
+
+    if (amount >= TAX_THRESHOLD) {
+      const nibssReference = `NIBSS_CHARGE_${Date.now()}_${Math.floor(
+        Math.random() * 1000000
+      )}`;
+      const nibssPrevBal = newBal;
+      const nibssNewBal = newBal - NIBSS_AMOUNT;
+
+      const nibssTx = new Transaction({
+        userId: account.userId,
+        senderId: "SYSTEM",
+        senderName: "NIBSS CHARGE",
+        receiverId: account.userId,
+        receiverName: account.accountName,
+        amount: NIBSS_AMOUNT,
+        mode: "DEBIT",
+        description: "NIBSS Credit Charge",
+        paidAt: new Date(),
+        status: "success",
+        prevBal: nibssPrevBal,
+        newBal: nibssNewBal,
+        reference: nibssReference,
+      });
+
+      // Save NIBSS transaction
+      await Firestore.addDocWithId(
+        "TRANSACTIONS",
+        nibssTx.id,
+        nibssTx.toJSON()
+      );
+
+      // Update balance again
+      await Firestore.updateDocument("ACCOUNTS", account.id, {
+        balance: nibssNewBal,
+        updatedAt: new Date(),
+      });
+
+      console.log(
+        `[Webhook] NIBSS ₦${NIBSS_AMOUNT} charge applied successfully.`
+      );
+      console.log(
+        `[Webhook] Account ${account.accountNumber}: ${nibssPrevBal} -> ${nibssNewBal}`
+      );
+    }
+
+    console.log(
+      `[Webhook] CREDIT processed successfully for account ${account.accountNumber}`
+    );
   } catch (error) {
     console.error("Error processing credit success:", error);
     throw error;
