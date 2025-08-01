@@ -28,10 +28,10 @@ class TaxService {
       cacheDate.setHours(0, 0, 0, 0);
 
       if (cacheDate.getTime() === today.getTime()) {
-        console.log(`[TaxService] Using cached count: ${cachedCount}`);
+        // console.log(`[TaxService] Using cached count: ${cachedCount}`);
         return cachedCount;
       } else {
-        console.log(`[TaxService] Cache expired for user: ${userId}`);
+        // console.log(`[TaxService] Cache expired for user: ${userId}`);
         this.cache.delete(cacheKey);
         this.cacheTimestamps.delete(cacheKey);
       }
@@ -59,18 +59,18 @@ class TaxService {
           txDate.getTime() < tomorrow.getTime();
 
         const isDebit = tx.mode === "DEBIT";
-        console.log(
-          `[TaxService] Transaction check: ID=${tx.id}, Date=${tx}, Mode=${
-            tx.mode
-          }, Valid=${isValidDate && isDebit}`
-        );
+        // console.log(
+        //   `[TaxService] Transaction check: ID=${tx.id}, Date=${tx}, Mode=${
+        //     tx.mode
+        //   }, Valid=${isValidDate && isDebit}`
+        // );
         return isValidDate && isDebit;
       });
 
       const count = todayTransactions.length;
-      console.log(
-        `[TaxService] Found ${count} debit transactions for user ${userId} today`
-      );
+      // console.log(
+      //   `[TaxService] Found ${count} debit transactions for user ${userId} today`
+      // );
 
       // Update cache
       this.cache.set(cacheKey, count);
@@ -87,9 +87,9 @@ class TaxService {
   }
 
   calculateTaxes(amount, dailyTransactionCount) {
-    console.log(
-      `[TaxService] Calculating taxes - Amount: ${amount}, Daily count: ${dailyTransactionCount}`
-    );
+    // console.log(
+    //   `[TaxService] Calculating taxes - Amount: ${amount}, Daily count: ${dailyTransactionCount}`
+    // );
 
     const vatAmount =
       dailyTransactionCount >= FREE_TRANSACTIONS_PER_DAY
@@ -111,7 +111,7 @@ class TaxService {
       ),
     };
 
-    console.log(`[TaxService] Tax calculation result:`, result);
+    // console.log(`[TaxService] Tax calculation result:`, result);
     return result;
   }
 
@@ -119,9 +119,9 @@ class TaxService {
     try {
       const dailyCount = await this.getDailyTransactionCount(userId);
       const freeLeft = Math.max(0, FREE_TRANSACTIONS_PER_DAY - dailyCount);
-      console.log(
-        `[TaxService] User ${userId}: Daily count: ${dailyCount}, Free left: ${freeLeft}`
-      );
+      // console.log(
+      //   `[TaxService] User ${userId}: Daily count: ${dailyCount}, Free left: ${freeLeft}`
+      // );
       return freeLeft;
     } catch (err) {
       console.error(
@@ -133,9 +133,9 @@ class TaxService {
   }
 
   async incrementTransactionCount(userId) {
-    console.log(
-      `[TaxService] Incrementing transaction count for user ${userId}`
-    );
+    // console.log(
+    //   `[TaxService] Incrementing transaction count for user ${userId}`
+    // );
 
     try {
       const currentCount = await this.getDailyTransactionCount(userId); // Refresh from DB to ensure accuracy
@@ -146,9 +146,9 @@ class TaxService {
       this.cache.set(cacheKey, newCount);
       this.cacheTimestamps.set(cacheKey, Date.now());
 
-      console.log(
-        `[TaxService] Transaction count updated from ${currentCount} to ${newCount} for user ${userId}`
-      );
+      // console.log(
+      //   `[TaxService] Transaction count updated from ${currentCount} to ${newCount} for user ${userId}`
+      // );
       return newCount;
     } catch (err) {
       console.error(
@@ -163,19 +163,19 @@ class TaxService {
     const cacheKey = `${userId}_daily_count`;
     this.cache.delete(cacheKey);
     this.cacheTimestamps.delete(cacheKey);
-    console.log(`[TaxService] Cache cleared for user ${userId}`);
+    // console.log(`[TaxService] Cache cleared for user ${userId}`);
   }
 
   clearAllCache() {
     this.cache.clear();
     this.cacheTimestamps.clear();
-    console.log(`[TaxService] All cache cleared`);
+    // console.log(`[TaxService] All cache cleared`);
   }
 
   async refreshCacheFromDatabase(userId) {
-    console.log(
-      `[TaxService] Refreshing cache from database for user ${userId}`
-    );
+    // console.log(
+    //   `[TaxService] Refreshing cache from database for user ${userId}`
+    // );
     const cacheKey = `${userId}_daily_count`;
     this.cache.delete(cacheKey);
     this.cacheTimestamps.delete(cacheKey);
